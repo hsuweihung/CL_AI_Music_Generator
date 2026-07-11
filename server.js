@@ -15,19 +15,20 @@ const app = express();
 app.use(express.json({ limit: '25mb' })); // 放寬 body 限制以容納參考圖片 base64
 app.use(express.static('public'));
 
-// Lyria 3 API 沒有明確的 duration / vocal / language 參數，
+// Lyria 3 API 沒有明確的 duration / vocal / language / gender 參數，
 // 這些都是靠 prompt 文字提示模型，所以這裡把 UI 欄位轉成提示句。
 // 語言依官方文件說明：「Lyria 3 會以提示的語言生成歌詞」，並無正式 language 參數，
 // 所以 language 為 'auto'（或未指定）時完全不加語言提示句，交由模型從 prompt 本身判斷。
-function buildPrompt({ prompt, vocal, language, durationSeconds }) {
+// gender 同理沒有正式參數，'auto' 時不加性別提示，交由模型自行判斷。
+function buildPrompt({ prompt, vocal, language, gender, durationSeconds }) {
   const parts = [prompt.trim()];
 
   if (vocal) {
-    parts.push(
-      language && language !== 'auto'
-        ? `The song should include vocals, sung in ${language}.`
-        : 'The song should include vocals.'
-    );
+    let vocalSentence = 'The song should include vocals';
+    if (gender && gender !== 'auto') vocalSentence += `, sung by a ${gender} voice`;
+    if (language && language !== 'auto') vocalSentence += `, in ${language}`;
+    vocalSentence += '.';
+    parts.push(vocalSentence);
   } else {
     parts.push('Instrumental only, no vocals.');
   }
@@ -76,12 +77,13 @@ app.post('/api/generate', async (req, res) => {
     prompt,
     vocal = false,
     language = 'auto',
+    gender = 'auto',
     durationSeconds = 90,
     numSongs = 1,
     images = [], // [{ mimeType, data(base64) }], 最多 10 張
   } = req.body;
 
-  const uiInput = { prompt, vocal, language, durationSeconds, numSongs, images: redactImages(images) };
+  const uiInput = { prompt, vocal, language, gender, durationSeconds, numSongs, images: redactImages(images) };
   console.log('[UI input]', JSON.stringify(uiInput));
 
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
@@ -100,7 +102,7 @@ app.post('/api/generate', async (req, res) => {
 
   // 時長 > 30 秒需要 Pro 模型（Clip 模型上限 30 秒、僅輸出 MP3）
   const modelId = clampedDuration > 30 ? 'lyria-3-pro-preview' : 'lyria-3-clip-preview';
-  const finalPrompt = buildPrompt({ prompt, vocal, language, durationSeconds: clampedDuration });
+  const finalPrompt = buildPrompt({ prompt, vocal, language, gender, durationSeconds: clampedDuration });
 
   const apiRequest = {
     model: modelId,

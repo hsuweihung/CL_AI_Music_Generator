@@ -145,6 +145,7 @@
     font-size: 12.5px; font-weight: 600; padding: 6px 18px; border-radius: 9px; cursor: pointer;
   }
   .segmented button.active { background: var(--blue); color: #fff; }
+  .segmented.disabled { opacity: 0.5; pointer-events: none; }
 
   /* language select */
   select {
@@ -307,6 +308,17 @@
   </section>
 
   <section>
+    <div class="toggle-row">
+      <div class="label">Vocal Gender</div>
+      <div class="segmented disabled" id="genderToggle">
+        <button data-value="auto" class="active">Auto</button>
+        <button data-value="female">Female</button>
+        <button data-value="male">Male</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
     <div class="slider-row">
       <div class="label">Estimated song length</div>
       <div class="value" id="durationLabel">00:01:30</div>
@@ -349,6 +361,7 @@ const clearBtn = document.getElementById('clearBtn');
 const chips = document.querySelectorAll('.chip');
 const vocalToggle = document.getElementById('vocalToggle');
 const languageEl = document.getElementById('language');
+const genderToggle = document.getElementById('genderToggle');
 const durationEl = document.getElementById('duration');
 const durationLabel = document.getElementById('durationLabel');
 const numSongsEl = document.getElementById('numSongs');
@@ -368,6 +381,7 @@ const logListEl = document.getElementById('logList');
 const logEmptyEl = document.getElementById('logEmpty');
 
 let vocalOn = false;
+let genderValue = 'auto';
 let images = []; // { mimeType, data(base64), previewUrl }
 let logs = []; // { id, time, status, request, response }
 
@@ -437,6 +451,14 @@ vocalToggle.addEventListener('click', (e) => {
   vocalOn = btn.dataset.value === 'on';
   vocalToggle.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
   languageEl.disabled = !vocalOn;
+  genderToggle.classList.toggle('disabled', !vocalOn);
+});
+
+genderToggle.addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  genderValue = btn.dataset.value;
+  genderToggle.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
 });
 
 function formatDuration(totalSeconds) {
@@ -506,6 +528,7 @@ generateBtn.addEventListener('click', async () => {
     prompt,
     vocal: vocalOn,
     language: languageEl.disabled ? null : languageEl.value,
+    gender: genderToggle.classList.contains('disabled') ? null : genderValue,
     durationSeconds: Number(durationEl.value),
     numSongs: Number(numSongsEl.value),
     images: images.map(({ mimeType, data }) => ({ mimeType, data })),
