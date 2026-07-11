@@ -19,13 +19,14 @@ app.use(express.static('public'));
 // 這些都是靠 prompt 文字提示模型，所以這裡把 UI 欄位轉成提示句。
 // 語言依官方文件說明：「Lyria 3 會以提示的語言生成歌詞」，並無正式 language 參數，
 // 所以 language 為 'auto'（或未指定）時完全不加語言提示句，交由模型從 prompt 本身判斷。
-// gender 同理沒有正式參數，'auto' 時不加性別提示，交由模型自行判斷。
+// gender 同理沒有正式參數；UI 只有 female/male 兩個選項（無 auto），未指定（例如 vocal
+// 關閉時）就不加性別提示。
 function buildPrompt({ prompt, vocal, language, gender, durationSeconds }) {
   const parts = [prompt.trim()];
 
   if (vocal) {
     let vocalSentence = 'The song should include vocals';
-    if (gender && gender !== 'auto') vocalSentence += `, sung by a ${gender} voice`;
+    if (gender) vocalSentence += `, sung by a ${gender} voice`;
     if (language && language !== 'auto') vocalSentence += `, in ${language}`;
     vocalSentence += '.';
     parts.push(vocalSentence);
@@ -77,7 +78,7 @@ app.post('/api/generate', async (req, res) => {
     prompt,
     vocal = false,
     language = 'auto',
-    gender = 'auto',
+    gender = null,
     durationSeconds = 90,
     numSongs = 1,
     images = [], // [{ mimeType, data(base64) }], 最多 10 張
