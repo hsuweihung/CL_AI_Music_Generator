@@ -111,6 +111,34 @@
   .chip .avatar { width: 20px; height: 20px; font-size: 10px; border-width: 0; }
   .chip:hover { border-color: var(--blue); }
 
+  /* genre / mood / theme tag picker */
+  .tag-tabs { display: flex; gap: 18px; margin-bottom: 12px; }
+  .tag-tab {
+    border: none; background: transparent; color: var(--text-dim);
+    font-size: 13.5px; font-weight: 600; padding: 6px 4px; cursor: pointer;
+  }
+  .tag-tab.active {
+    background: var(--blue-dim); color: var(--blue);
+    padding: 6px 14px; border-radius: 14px;
+  }
+  .tag-grid {
+    display: grid;
+    grid-template-rows: repeat(3, auto);
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: 8px;
+    overflow-x: auto; overflow-y: hidden;
+    padding-bottom: 6px;
+    scrollbar-width: none;
+  }
+  .tag-grid::-webkit-scrollbar { display: none; }
+  .tag-pill {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 7px 14px;
+    font-size: 12.5px; color: var(--text); cursor: pointer;
+  }
+  .tag-pill.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+
   /* reference photo */
   .ref-header { display: flex; align-items: center; justify-content: space-between; }
   .ref-header .label { margin-bottom: 0; }
@@ -282,6 +310,15 @@
   </section>
 
   <section>
+    <div class="tag-tabs" id="tagTabs">
+      <button class="tag-tab active" data-tab="genre">Genre</button>
+      <button class="tag-tab" data-tab="mood">Mood</button>
+      <button class="tag-tab" data-tab="theme">Theme</button>
+    </div>
+    <div class="tag-grid" id="tagGrid"></div>
+  </section>
+
+  <section>
     <div class="toggle-row">
       <div class="label">Vocal</div>
       <div class="segmented" id="vocalToggle">
@@ -376,10 +413,63 @@ const closeLogBtn = document.getElementById('closeLogBtn');
 const logOverlay = document.getElementById('logOverlay');
 const logListEl = document.getElementById('logList');
 const logEmptyEl = document.getElementById('logEmpty');
+const tagTabs = document.getElementById('tagTabs');
+const tagGrid = document.getElementById('tagGrid');
 
 let vocalOn = false;
 let genderValue = 'female';
 let images = []; // { mimeType, data(base64), previewUrl }
+
+const TAG_OPTIONS = {
+  genre: [
+    'Acoustic', 'Hip Hop', 'Beats', 'Funk', 'Pop', 'Drum n Bass', 'Trap', 'Tokyo night pop',
+    'Rock', 'Latin', 'House', 'Tropical House', 'Ambient', 'Orchestra', 'Electro & Dance',
+    'Electronica', 'Techno & Trance', 'Jersey Club', 'Drill', 'R&B', 'Lofi Hip Hop', 'World',
+    'Afrobeats', 'Christmas',
+  ],
+  mood: [
+    'Angry', 'Busy & Frantic', 'Dark', 'Dreamy', 'Elegant', 'Epic', 'Euphoric', 'Fear',
+    'Funny & Weird', 'Glamorous', 'Happy', 'Heavy & Ponderous', 'Hopeful', 'Laid Back',
+    'Mysterious', 'Peaceful', 'Restless', 'Romantic', 'Running', 'Sad', 'Scary', 'Sentimental',
+    'Sexy', 'Smooth', 'Suspense',
+  ],
+  theme: [
+    'Ads & Trailers', 'Broadcasting', 'Cinematic', 'Corporate', 'Comedy', 'Cooking',
+    'Documentary', 'Drama', 'Fashion & Beauty', 'Gaming', 'Holiday Season', 'Horror & Thriller',
+    'Motivational & Inspiring', 'Nature', 'Photography', 'Sports & Action', 'Technology',
+    'Travel', 'Tutorials', 'Vlogs', 'Wedding & Romance', 'Workout & Wellness',
+  ],
+};
+let activeTagTab = 'genre';
+const selectedTags = { genre: new Set(), mood: new Set(), theme: new Set() };
+
+function renderTagGrid() {
+  tagGrid.innerHTML = TAG_OPTIONS[activeTagTab].map((tag) => `
+    <button class="tag-pill ${selectedTags[activeTagTab].has(tag) ? 'active' : ''}" data-tag="${tag}">${tag}</button>
+  `).join('');
+}
+
+tagTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tag-tab');
+  if (!btn) return;
+  activeTagTab = btn.dataset.tab;
+  tagTabs.querySelectorAll('.tag-tab').forEach((b) => b.classList.toggle('active', b === btn));
+  renderTagGrid();
+});
+
+tagGrid.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tag-pill');
+  if (!btn) return;
+  const tag = btn.dataset.tag;
+  if (selectedTags[activeTagTab].has(tag)) {
+    selectedTags[activeTagTab].delete(tag);
+  } else {
+    selectedTags[activeTagTab].add(tag);
+  }
+  renderTagGrid();
+});
+
+renderTagGrid();
 let logs = []; // { id, time, status, request, response }
 
 function escapeHtml(str) {
@@ -526,6 +616,11 @@ generateBtn.addEventListener('click', async () => {
     vocal: vocalOn,
     language: vocalOn ? languageEl.value : null,
     gender: vocalOn ? genderValue : null,
+    tags: {
+      genre: [...selectedTags.genre],
+      mood: [...selectedTags.mood],
+      theme: [...selectedTags.theme],
+    },
     durationSeconds: Number(durationEl.value),
     numSongs: Number(numSongsEl.value),
     images: images.map(({ mimeType, data }) => ({ mimeType, data })),
