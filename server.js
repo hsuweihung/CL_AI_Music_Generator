@@ -21,17 +21,8 @@ app.use(express.static('public'));
 // 所以 language 為 'auto'（或未指定）時完全不加語言提示句，交由模型從 prompt 本身判斷。
 // gender 同理沒有正式參數；UI 只有 female/male 兩個選項（無 auto），未指定（例如 vocal
 // 關閉時）就不加性別提示。
-// genre / mood / theme 是 Lyria 3 官方範例本來就常用的描述詞（例如 "ambient track"、
-// "acoustic guitar piece"），所以直接寫成 "Genre: X, Y." 這種提示句，比 language/gender
-// 這種模型沒有正式支援的欄位更貼近官方建議用法。
-function buildPrompt({ prompt, vocal, language, gender, tags, durationSeconds }) {
+function buildPrompt({ prompt, vocal, language, gender, durationSeconds }) {
   const parts = [prompt.trim()];
-
-  if (tags) {
-    for (const [label, values] of [['Genre', tags.genre], ['Mood', tags.mood], ['Theme', tags.theme]]) {
-      if (values?.length) parts.push(`${label}: ${values.join(', ')}.`);
-    }
-  }
 
   if (vocal) {
     let vocalSentence = 'The song should include vocals';
@@ -88,13 +79,12 @@ app.post('/api/generate', async (req, res) => {
     vocal = false,
     language = 'auto',
     gender = null,
-    tags = null, // { genre: string[], mood: string[], theme: string[] }
     durationSeconds = 90,
     numSongs = 1,
     images = [], // [{ mimeType, data(base64) }], 最多 10 張
   } = req.body;
 
-  const uiInput = { prompt, vocal, language, gender, tags, durationSeconds, numSongs, images: redactImages(images) };
+  const uiInput = { prompt, vocal, language, gender, durationSeconds, numSongs, images: redactImages(images) };
   console.log('[UI input]', JSON.stringify(uiInput));
 
   if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
@@ -113,7 +103,7 @@ app.post('/api/generate', async (req, res) => {
 
   // 時長 > 30 秒需要 Pro 模型（Clip 模型上限 30 秒、僅輸出 MP3）
   const modelId = clampedDuration > 30 ? 'lyria-3-pro-preview' : 'lyria-3-clip-preview';
-  const finalPrompt = buildPrompt({ prompt, vocal, language, gender, tags, durationSeconds: clampedDuration });
+  const finalPrompt = buildPrompt({ prompt, vocal, language, gender, durationSeconds: clampedDuration });
 
   const apiRequest = {
     model: modelId,

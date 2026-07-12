@@ -85,31 +85,6 @@
     font-size: 11px; color: var(--text-dim);
   }
   .ta-clear { background: none; border: none; color: var(--text-dim); font-size: 11px; cursor: pointer; }
-  .avatar {
-    width: 28px; height: 28px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--purple-a), var(--purple-b));
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 700; color: #fff;
-    border: 2px solid var(--panel);
-    flex-shrink: 0;
-  }
-  .avatar-float {
-    position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
-    cursor: pointer;
-  }
-
-  /* suggestion chips */
-  .chips { display: flex; gap: 8px; overflow-x: auto; margin-top: 20px; padding-bottom: 2px; scrollbar-width: none; }
-  .chips::-webkit-scrollbar { display: none; }
-  .chip {
-    display: flex; align-items: center; gap: 6px;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 16px; padding: 6px 12px 6px 6px;
-    font-size: 12px; white-space: nowrap; color: var(--text);
-    cursor: pointer; flex-shrink: 0;
-  }
-  .chip .avatar { width: 20px; height: 20px; font-size: 10px; border-width: 0; }
-  .chip:hover { border-color: var(--blue); }
 
   /* genre / mood / theme tag picker */
   .tag-tabs { display: flex; gap: 18px; margin-bottom: 12px; }
@@ -289,12 +264,15 @@
         <button class="ta-clear" id="clearBtn">Clear</button>
       </div>
     </div>
+  </section>
 
-    <div class="chips">
-      <div class="chip" data-text="One way trip through a dreamy synthwave night drive.">One way trip...</div>
-      <div class="chip" data-text="Write lyrics for me about chasing a sunset on the coast.">Write lyrics for me</div>
-      <div class="chip" data-text="Write lyrics for me about a summer festival crowd singing along.">Write lyrics for me</div>
+  <section>
+    <div class="tag-tabs" id="tagTabs">
+      <button class="tag-tab active" data-tab="genre">Genre</button>
+      <button class="tag-tab" data-tab="mood">Mood</button>
+      <button class="tag-tab" data-tab="theme">Theme</button>
     </div>
+    <div class="tag-grid" id="tagGrid"></div>
   </section>
 
   <section>
@@ -307,15 +285,6 @@
     </div>
     <input type="file" id="fileInput" accept="image/*" multiple hidden>
     <div class="thumbs" id="thumbs"></div>
-  </section>
-
-  <section>
-    <div class="tag-tabs" id="tagTabs">
-      <button class="tag-tab active" data-tab="genre">Genre</button>
-      <button class="tag-tab" data-tab="mood">Mood</button>
-      <button class="tag-tab" data-tab="theme">Theme</button>
-    </div>
-    <div class="tag-grid" id="tagGrid"></div>
   </section>
 
   <section>
@@ -390,7 +359,6 @@
 const promptEl = document.getElementById('prompt');
 const charCount = document.getElementById('charCount');
 const clearBtn = document.getElementById('clearBtn');
-const chips = document.querySelectorAll('.chip');
 const vocalToggle = document.getElementById('vocalToggle');
 const languageEl = document.getElementById('language');
 const languageSection = document.getElementById('languageSection');
@@ -419,7 +387,12 @@ const tagGrid = document.getElementById('tagGrid');
 let vocalOn = false;
 let genderValue = 'female';
 let images = []; // { mimeType, data(base64), previewUrl }
+let logs = []; // { id, time, status, request, response }
 
+// Genre/Mood/Theme 不是獨立維護的勾選狀態，點了直接把 tag 文字寫進 textarea
+// （例如 "原本的" -> "原本的, Jazz"），送給後端時就是普通 prompt 文字的一部分，
+// 不需要另外送一個結構化的 tags 欄位。pill 亮不亮，也是直接檢查 textarea 目前
+// 的內容裡有沒有這段文字來判斷，就算使用者手動編輯過 textarea，畫面也不會兜不起來。
 const TAG_OPTIONS = {
   genre: [
     'Acoustic', 'Hip Hop', 'Beats', 'Funk', 'Pop', 'Drum n Bass', 'Trap', 'Tokyo night pop',
@@ -441,11 +414,18 @@ const TAG_OPTIONS = {
   ],
 };
 let activeTagTab = 'genre';
-const selectedTags = { genre: new Set(), mood: new Set(), theme: new Set() };
+
+function tagInsertText(tag) {
+  return `, ${tag}`;
+}
+
+function isTagActive(tag) {
+  return promptEl.value.includes(tagInsertText(tag));
+}
 
 function renderTagGrid() {
   tagGrid.innerHTML = TAG_OPTIONS[activeTagTab].map((tag) => `
-    <button class="tag-pill ${selectedTags[activeTagTab].has(tag) ? 'active' : ''}" data-tag="${tag}">${tag}</button>
+    <button class="tag-pill ${isTagActive(tag) ? 'active' : ''}" data-tag="${tag}">${tag}</button>
   `).join('');
 }
 
@@ -461,16 +441,15 @@ tagGrid.addEventListener('click', (e) => {
   const btn = e.target.closest('.tag-pill');
   if (!btn) return;
   const tag = btn.dataset.tag;
-  if (selectedTags[activeTagTab].has(tag)) {
-    selectedTags[activeTagTab].delete(tag);
+  const insertText = tagInsertText(tag);
+  if (promptEl.value.includes(insertText)) {
+    promptEl.value = promptEl.value.replace(insertText, '');
   } else {
-    selectedTags[activeTagTab].add(tag);
+    promptEl.value += insertText;
   }
+  updateCharCount();
   renderTagGrid();
 });
-
-renderTagGrid();
-let logs = []; // { id, time, status, request, response }
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -516,6 +495,7 @@ function updateCharCount() {
     promptEl.value = promptEl.value.slice(0, MAX_CHARS);
   }
   charCount.textContent = `${promptEl.value.length}/${MAX_CHARS}`;
+  renderTagGrid(); // 使用者手動編輯 textarea 時，pill 亮不亮也要跟著重新計算
 }
 promptEl.addEventListener('input', updateCharCount);
 updateCharCount();
@@ -523,13 +503,6 @@ updateCharCount();
 clearBtn.addEventListener('click', () => {
   promptEl.value = '';
   updateCharCount();
-});
-
-chips.forEach((chip) => {
-  chip.addEventListener('click', () => {
-    promptEl.value = chip.dataset.text;
-    updateCharCount();
-  });
 });
 
 vocalToggle.addEventListener('click', (e) => {
@@ -616,11 +589,6 @@ generateBtn.addEventListener('click', async () => {
     vocal: vocalOn,
     language: vocalOn ? languageEl.value : null,
     gender: vocalOn ? genderValue : null,
-    tags: {
-      genre: [...selectedTags.genre],
-      mood: [...selectedTags.mood],
-      theme: [...selectedTags.theme],
-    },
     durationSeconds: Number(durationEl.value),
     numSongs: Number(numSongsEl.value),
     images: images.map(({ mimeType, data }) => ({ mimeType, data })),
